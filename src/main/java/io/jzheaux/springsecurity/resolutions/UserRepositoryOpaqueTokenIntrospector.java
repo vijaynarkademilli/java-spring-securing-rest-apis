@@ -2,6 +2,7 @@ package io.jzheaux.springsecurity.resolutions;
 
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.oauth2.core.DefaultOAuth2AuthenticatedPrincipal;
 import org.springframework.security.oauth2.core.OAuth2AuthenticatedPrincipal;
 import org.springframework.security.oauth2.server.resource.introspection.OpaqueTokenIntrospector;
@@ -21,9 +22,13 @@ public class UserRepositoryOpaqueTokenIntrospector implements OpaqueTokenIntrosp
 	@Override
 	public OAuth2AuthenticatedPrincipal introspect(String token) {
 		OAuth2AuthenticatedPrincipal principal = this.delegate.introspect(token);
-		Collection<GrantedAuthority> authorities = principal.getAuthorities().stream()
-				.map(authority -> new SimpleGrantedAuthority(authority.getAuthority().substring(6)))
-				.collect(Collectors.toList());
-		return new DefaultOAuth2AuthenticatedPrincipal(principal.getAttributes(), authorities);
+		return this.users.findByUsername(principal.getName())
+				.map(user -> {
+					Collection<GrantedAuthority> authorities = principal.getAuthorities().stream()
+							.map(authority -> new SimpleGrantedAuthority(authority.getAuthority().substring(6)))
+							.collect(Collectors.toList());
+					return new DefaultOAuth2AuthenticatedPrincipal(principal.getAttributes(), authorities);
+				})
+				.orElseThrow(() -> new UsernameNotFoundException("no user"));
 	}
 }
