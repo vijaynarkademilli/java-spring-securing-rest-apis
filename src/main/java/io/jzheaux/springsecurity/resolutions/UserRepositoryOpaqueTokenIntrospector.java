@@ -7,6 +7,7 @@ import org.springframework.security.oauth2.core.DefaultOAuth2AuthenticatedPrinci
 import org.springframework.security.oauth2.core.OAuth2AuthenticatedPrincipal;
 import org.springframework.security.oauth2.server.resource.introspection.OpaqueTokenIntrospector;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.stream.Collectors;
 
@@ -24,9 +25,18 @@ public class UserRepositoryOpaqueTokenIntrospector implements OpaqueTokenIntrosp
 		OAuth2AuthenticatedPrincipal principal = this.delegate.introspect(token);
 		return this.users.findByUsername(principal.getName())
 				.map(user -> {
-					Collection<GrantedAuthority> authorities = principal.getAuthorities().stream()
+					Collection<GrantedAuthority> authorities = new ArrayList<>();
+					principal.getAuthorities().stream()
 							.map(authority -> new SimpleGrantedAuthority(authority.getAuthority().substring(6)))
+							.collect(Collectors.toCollection(() -> authorities));
+					Collection<GrantedAuthority> userAuthorities = user.getUserAuthorities().stream()
+							.map(authority -> new SimpleGrantedAuthority(authority.getAuthority()))
 							.collect(Collectors.toList());
+					authorities.retainAll(userAuthorities);
+					if ("premium".equals(user.getSubscription()) &&
+							authorities.contains(new SimpleGrantedAuthority("resolution:write"))) {
+						authorities.add(new SimpleGrantedAuthority("resolution:share"));
+					}
 					return new DefaultOAuth2AuthenticatedPrincipal(principal.getAttributes(), authorities);
 				})
 				.orElseThrow(() -> new UsernameNotFoundException("no user"));
